@@ -3,8 +3,11 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 import os
 
+# run_gui.py
 from stego.core import encode_image, decode_image
-from stego.utils import open_image_rgb, calc_capacity_bits
+from stego.utils import open_image_rgb, save_image_rgb, calc_capacity_bits
+from app_gui.gui import StegoApp  # if you're importing the GUI class
+
 
 class App(tk.Tk):
     def __init__(self):
