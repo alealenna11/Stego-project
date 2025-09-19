@@ -1,80 +1,128 @@
-import hashlib
-import numpy as np
-from dataclasses import dataclass
-from typing import Tuple
-from PIL import Image
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+from typing import Optional
 
-# Constants
-MAGIC = b"LSB1"
-VERSION = 1
-SALT_HEADER = b"LSB_HDR_SALT__v1"
-PREHEADER_LEN = 7
+# call into your engine
+from stego.core import encode_image, decode_image
 
-def pack_preheader(header_len: int) -> bytes:
-    if not (0 <= header_len <= 65535):
-        raise ValueError("header_len must fit in uint16")
-    return MAGIC + bytes([VERSION]) + header_len.to_bytes(2, "little")
+class StegoApp:
+    def __init__(self, root: tk.Tk):
+        self.root = root
+        self.root.title("LSB Stego Tool")
+        self.root.geometry("720x340")
 
-def unpack_preheader(buf: bytes) -> Tuple[int, int]:
-    if buf[:4] != MAGIC:
-        raise ValueError("Not a valid preheader")
-    ver = buf[4]
-    if ver != VERSION:
-        raise ValueError("Unsupported version")
-    header_len = int.from_bytes(buf[5:7], "little")
-    return header_len, PREHEADER_LEN
+        self.cover_path: Optional[str] = None
+        self.payload_path: Optional[str] = None
+        self.stego_path: Optional[str] = None
 
-@dataclass
-class Header:
-    lsb_depth: int
-    encrypted: bool
-    payload_len: int
-    sha256_plain: bytes
-    filename: str
-    salt: bytes
-    nonce: bytes
+        frm = ttk.Frame(root, padding=12)
+        frm.pack(fill="both", expand=True)
 
-    def pack(self) -> bytes:
-        flags = 1 if self.encrypted else 0
-        name_bytes = self.filename.encode("utf-8")[:255]
-        return b"".join([
-            bytes([self.lsb_depth]),
-            bytes([flags]),
-            self.payload_len.to_bytes(8, "little"),
-            self.sha256_plain,
-            bytes([len(name_bytes)]),
-            name_bytes,
-            self.salt,
-            self.nonce
-        ])
+        # --- ENCODE ---
+        enc_lab = ttk.Label(frm, text="Encode (hide payload into image)", font=("Segoe UI", 11, "bold"))
+        enc_lab.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
 
-def unpack_header(buf: bytes) -> Tuple[Header, int]:
-    pos = 0
-    lsb_depth = buf[pos]; pos += 1
-    flags = buf[pos]; pos += 1
-    encrypted = bool(flags & 1)
-    payload_len = int.from_bytes(buf[pos:pos+8], "little"); pos += 8
-    sha256_plain = buf[pos:pos+32]; pos += 32
-    name_len = buf[pos]; pos += 1
-    name = buf[pos:pos+name_len].decode("utf-8"); pos += name_len
-    salt = buf[pos:pos+16]; pos += 16
-    nonce = buf[pos:pos+12]; pos += 12
-    return Header(lsb_depth, encrypted, payload_len, sha256_plain, name, salt, nonce), pos
+        ttk.Button(frm, text="Choose Cover Image...", command=self.choose_cover).grid(row=1, column=0, sticky="w")
+        self.lbl_cover = ttk.Label(frm, text="(none)")
+        self.lbl_cover.grid(row=1, column=1, columnspan=2, sticky="w")
 
-def sha256(data: bytes) -> bytes:
-    return hashlib.sha256(data).digest()
+        ttk.Button(frm, text="Choose Payload (any file)...", command=self.choose_payload).grid(row=2, column=0, sticky="w")
+        self.lbl_payload = ttk.Label(frm, text="(none)")
+        self.lbl_payload.grid(row=2, column=1, columnspan=2, sticky="w")
 
-def open_image_rgb(path: str):
-    im = Image.open(path).convert("RGB")
-    arr = np.array(im)
-    return arr, im
+        ttk.Label(frm, text="Password (optional):").grid(row=3, column=0, sticky="w")
+        self.ent_password = ttk.Entry(frm, show="*")
+        self.ent_password.grid(row=3, column=1, sticky="we", padx=(6, 0))
 
-def save_image_rgb(arr: np.ndarray, ref_image: Image.Image, out_path: str):
-    Image.fromarray(arr.astype(np.uint8), mode="RGB").save(out_path)
+        ttk.Label(frm, text="LSB depth (1–4):").grid(row=4, column=0, sticky="w")
+        self.spn_lsb = ttk.Spinbox(frm, from_=1, to=4, width=4)
+        self.spn_lsb.set(1)
+        self.spn_lsb.grid(row=4, column=1, sticky="w", padx=(6, 0))
 
-def calc_capacity_bits(arr: np.ndarray, lsb_depth: int) -> int:
-    h, w, c = arr.shape
-    return h * w * c * lsb_depth
+        ttk.Button(frm, text="Encode → Save Stego Image...", command=self.encode_action) \
+            .grid(row=5, column=0, sticky="w", pady=(6, 12))
 
-def flatten_channels(arr: np.ndarray) -> np.ndarray:
-    return arr.reshape(-1, 3).reshape(-1)
+        ttk.Separator(frm, orient="horizontal").grid(row=6, column=0, columnspan=3, sticky="ew", pady=8)
+
+        # --- DECODE ---
+        dec_lab = ttk.Label(frm, text="Decode (extract payload from stego image)", font=("Segoe UI", 11, "bold"))
+        dec_lab.grid(row=7, column=0, columnspan=3, sticky="w", pady=(0, 6))
+
+        ttk.Button(frm, text="Choose Stego Image...", command=self.choose_stego).grid(row=8, column=0, sticky="w")
+        self.lbl_stego = ttk.Label(frm, text="(none)")
+        self.lbl_stego.grid(row=8, column=1, columnspan=2, sticky="w")
+
+        ttk.Label(frm, text="Password (if used):").grid(row=9, column=0, sticky="w")
+        self.ent_password_dec = ttk.Entry(frm, show="*")
+        self.ent_password_dec.grid(row=9, column=1, sticky="we", padx=(6, 0))
+
+        ttk.Button(frm, text="Decode → Save Payload As...", command=self.decode_action) \
+            .grid(row=10, column=0, sticky="w", pady=(6, 0))
+
+        frm.columnconfigure(1, weight=1)
+
+    # ---------- ENCODE ----------
+    def choose_cover(self):
+        path = filedialog.askopenfilename(
+            title="Choose cover image",
+            filetypes=[("Images", "*.png;*.bmp;*.jpg;*.jpeg;*.tif;*.tiff"), ("All files", "*.*")]
+        )
+        if path:
+            self.cover_path = path
+            self.lbl_cover.config(text=path)
+
+    def choose_payload(self):
+        path = filedialog.askopenfilename(title="Choose payload file", filetypes=[("All files", "*.*")])
+        if path:
+            self.payload_path = path
+            self.lbl_payload.config(text=path)
+
+    def encode_action(self):
+        if not self.cover_path or not self.payload_path:
+            messagebox.showwarning("Missing input", "Choose a cover image and a payload file first.")
+            return
+        out_path = filedialog.asksaveasfilename(
+            title="Save stego image as",
+            defaultextension=".png",
+            filetypes=[("PNG image", "*.png"), ("BMP image", "*.bmp"), ("All files", "*.*")]
+        )
+        if not out_path:
+            return
+        try:
+            lsb_depth = int(self.spn_lsb.get())
+            if not (1 <= lsb_depth <= 4):
+                raise ValueError
+        except Exception:
+            messagebox.showerror("Invalid LSB depth", "Please enter an integer between 1 and 4.")
+            return
+
+        password = self.ent_password.get() or None
+        try:
+            encode_image(self.cover_path, self.payload_path, out_path, lsb_depth, password)
+            messagebox.showinfo("Success", f"Stego image saved:\n{out_path}")
+        except Exception as e:
+            messagebox.showerror("Encode failed", str(e))
+
+    # ---------- DECODE ----------
+    def choose_stego(self):
+        path = filedialog.askopenfilename(
+            title="Choose stego image",
+            filetypes=[("Images", "*.png;*.bmp;*.jpg;*.jpeg;*.tif;*.tiff"), ("All files", "*.*")]
+        )
+        if path:
+            self.stego_path = path
+            self.lbl_stego.config(text=path)
+
+    def decode_action(self):
+        if not self.stego_path:
+            messagebox.showwarning("Missing input", "Choose a stego image first.")
+            return
+        out_payload = filedialog.asksaveasfilename(title="Save extracted payload as", filetypes=[("All files", "*.*")])
+        if not out_payload:
+            return
+        password = self.ent_password_dec.get() or None
+        try:
+            decode_image(self.stego_path, out_payload, password)
+            messagebox.showinfo("Success", f"Payload saved:\n{out_payload}")
+        except Exception as e:
+            messagebox.showerror("Decode failed", str(e))

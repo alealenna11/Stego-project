@@ -1,0 +1,86 @@
+✅ Requirements you have satisfied
+Core Steganography
+
+GUI-based LSB Replacement steganography & steganalysis program
+
+✅ You have a Tkinter GUI (gui.py + run_gui.py) with encoding/decoding workflows.
+
+✅ Supports preview of cover/stego images, and file dialogs.
+
+Support for multiple cover types
+
+✅ Images (.png/.bmp/.jpg/.jpeg)
+
+✅ GIFs (first frame)
+
+✅ Videos (.mp4/.avi, first frame)
+
+✅ Audio (.wav, 16-bit PCM)
+
+That’s 4 cover object types—well beyond “at least 1 image + 1 audio”.
+
+Support for arbitrary payload files (text, image, PDF, exe, etc.)
+
+✅ Your encode_* functions just read raw bytes of any file, so any payload type works.
+
+User-provided key required
+
+✅ Password box included in GUI, passed into encode/decode functions.
+
+✅ Key influences LSB embedding order via permutation (rng_indices).
+
+Select number of LSBs (1–8)
+
+✅ Spinbox in GUI for lsb_depth (1–8).
+
+✅ Core respects this in both image and audio encoding.
+
+Capacity calculation + warning
+
+✅ Implemented for images and WAV files (update_capacity).
+
+⚠ For GIF/Video you show “(not shown for GIF/Video)”, which is acceptable unless explicitly required.
+
+Error handling for oversized payloads
+
+✅ You check if total_bits_needed > capacity: raise ValueError.
+
+Display/playback of cover & stego
+
+✅ Images shown side by side.
+
+✅ WAV supported as cover/stego file (can be played externally).
+
+⚠ GIF/Video aren’t previewed yet (just filename label). Basic support exists but no playback inside GUI.
+
+Encryption & integrity check
+
+✅ ChaCha20-Poly1305 encryption if password used.
+
+✅ SHA-256 verification in decode.
+
+Drag & drop / file explorer selection
+
+✅ Implemented via Tkinter filedialog (explorer-style).
+
+⚠ Drag-and-drop is not yet added (only dialog browsing).
+
+⚠ Requirements partially covered
+
+(4) Selection of embedding location (mouse click / drag-drop into image region)
+➝ ❌ Not implemented yet. Currently everything starts at channel 0 with permutation after header.
+(Non-basic requirement → optional bonus.)
+
+(8) Play payload directly in GUI
+➝ ❌ Currently payloads are only saved. GUI doesn’t “play audio” or “open PDF/image/text” inline.
+(But external open works, which may be acceptable for demo.)
+
+(9) Visualization (difference map / waveform comparison)
+➝ ❌ You have visualize.py with diff_map, but it’s not wired into GUI.
+(Non-basic but good for demo points.)
+
+❌ Requirements not yet covered
+
+Innovation bonus (e.g. MP4 multi-frame embedding, full steganalysis, key distribution)
+➝ ❌ You currently only embed in the first frame for GIF/Video. Full multi-frame hiding = optional innovation mark.
+➝ ❌ No additional steganalysis (diff map isn’t integrated in GUI yet).
